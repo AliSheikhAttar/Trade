@@ -1,2 +1,5 @@
 # Trade
-Trade Course Technical Analysis, Indicators, Algorithms
+Trade Course 
+- Technical Analysis
+- Indicators
+- Algorithms (pinescript/python)
