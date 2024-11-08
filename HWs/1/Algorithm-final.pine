@@ -1,0 +1,128 @@
+//@version=5
+strategy("ASA Strategy - HW1", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// --- Step 1: Define Parameters and Indicators ---
+
+shortLength = input.int(9, title="Short-term MA Length")
+longLength = input.int(21, title="Long-term MA Length")
+
+// --- Moving Average type ---
+useEMA = input.bool(true, title="Use EMA (false for SMA)")
+
+// --- Moving Averages ---
+shortMA = useEMA ? ta.ema(close, shortLength) : ta.sma(close, shortLength)
+longMA = useEMA ? ta.ema(close, longLength) : ta.sma(close, longLength)
+
+// MACD and RSI settings
+macdFast = input.int(12, title="MACD Fast Length")
+macdSlow = input.int(26, title="MACD Slow Length")
+macdSignal = input.int(9, title="MACD Signal Length")
+rsiLength = input.int(14, title="RSI Length")
+
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+rsi = ta.rsi(close, rsiLength)
+
+macdhist_tesh = input.int(0,title = "MACD_Tresh_hold")
+
+rsi_enter_ob = input.int(70, title = "RSI overbought enter")
+rsi_enter_os = input.int(30, title = "RSI oversold enter")
+rsi_exit_ob = input.int(70, title = "RSI overbought exit")
+rsi_exit_os = input.int(30, title = "RSI oversold exit")
+// Volume Analysis (simplified to avoid blocking trades)
+volumeThreshold = input.float(0.7, title="Volume Threshold Multiplier", minval=0.1)
+
+// Calculate crossover angle by slope of the short MA
+angleThreshold = input.float(0.1, title="Crossover Angle Threshold")
+crossoverAngle = math.atan(shortMA - ta.valuewhen(shortMA != shortMA[1], shortMA[1], 0))
+
+//********************************
+// --- Step 2: Entry Conditions ---
+//********************************
+
+// Moving Average Crossover Condition
+bullishCrossover = ta.crossover(shortMA, longMA) and crossoverAngle > angleThreshold
+bearishCrossover = ta.crossunder(shortMA, longMA) and crossoverAngle < -angleThreshold
+// Volume Confirmation
+highVolume = volume > ta.sma(volume, 30) * volumeThreshold
+// MACD Confirmation (positive momentum for long, negative for short)
+macdConfirmBullish = histLine > macdhist_tesh
+macdConfirmBearish = histLine < -macdhist_tesh
+// RSI Confirmation (not overbought/oversold)
+rsiConfirmBullish = rsi < rsi_enter_ob
+rsiConfirmBearish = rsi > rsi_enter_os
+// Final Entry Signals (simplified logic)
+
+// Final Entry Signals
+enterLong = bullishCrossover and macdConfirmBullish and rsiConfirmBullish and highVolume
+enterShort = bearishCrossover and macdConfirmBearish and rsiConfirmBearish and highVolume
+
+//********************************
+// --- Step 3: Exit Conditions ---
+//********************************
+
+// Opposite MACD Cross
+macdExitLong = ta.crossunder(macdLine, signalLine)
+macdExitShort = ta.crossover(macdLine, signalLine)
+
+// RSI Overbought/Oversold Regions
+exitOverbought = rsi > rsi_exit_ob
+exitOversold = rsi < rsi_exit_os
+
+// Detect divergence on RSI or MACD with a set maximum candle distance
+lookbackDivergence = input.int(1, title = "lookback divergence parameter")
+divergenceLookback = input.int(5, title="Max Candle Distance for Divergence")
+regularBullishDiv = ta.lowest(close, divergenceLookback) > ta.lowest(close, divergenceLookback + lookbackDivergence)
+regularBearishDiv = ta.highest(close, divergenceLookback) < ta.highest(close, divergenceLookback + lookbackDivergence)
+
+MACDBullishDiv = ta.lowest(macdLine, divergenceLookback) < ta.lowest(close, divergenceLookback + lookbackDivergence)
+MACDBearishDiv = ta.highest(macdLine, divergenceLookback) > ta.highest(close, divergenceLookback + lookbackDivergence)
+
+BullishDiv = regularBullishDiv and MACDBullishDiv
+BearishDiv = regularBearishDiv and MACDBearishDiv
+// Exit Signals
+exitLong = macdExitLong or exitOverbought or BearishDiv
+exitShort = macdExitShort or exitOversold or BullishDiv
+
+//*******************************
+// --- Step 4: Risk Management ---
+//*******************************
+
+// Stop-loss and Take-profit
+stopLoss = input.float(0.02, title="Stop-loss %")
+takeProfit = input.float(0.05, title="Take-profit %")
+
+// Calculate stop-loss and take-profit prices
+longStopPrice = close * (1 - stopLoss)
+longTakeProfitPrice = close * (1 + takeProfit)
+shortStopPrice = close * (1 + stopLoss)
+shortTakeProfitPrice = close * (1 - takeProfit)
+
+// Trailing stop option (for example, 1.5% trail)
+trailStopLoss = input.float(0.015, title="Trailing Stop-loss %")
+
+//****************************************
+// --- Strategy Entry and Exit Commands ---
+//****************************************
+
+// Enter Long Position
+if (enterLong)
+    strategy.entry("Long", strategy.long, comment="Long Entry")
+    strategy.exit("Take Profit/Stop Loss", "Long", stop=longStopPrice, limit=longTakeProfitPrice, trail_points=trailStopLoss * close)
+
+// Enter Short Position
+if (enterShort)
+    strategy.entry("Short", strategy.short, comment="Short Entry")
+    strategy.exit("Take Profit/Stop Loss", "Short", stop=shortStopPrice, limit=shortTakeProfitPrice, trail_points=trailStopLoss * close)
+
+// Exit Long Position
+if (exitLong)
+    strategy.close("Long", comment="Exit Long")
+
+// Exit Short Position
+if (exitShort)
+    strategy.close("Short", comment="Exit Short")
+
+
+// --- Plotting MAs for visualization ---
+plot(shortMA, title="Short-term MA", color=color.blue)
+plot(longMA, title="Long-term MA", color=color.red)

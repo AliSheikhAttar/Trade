@@ -1,0 +1,56 @@
+//@version=5
+strategy("RSI and EMA Crossover Strategy with Risk Management", overlay=true)
+
+// Define RSI settings
+rsi_length = 14
+rsi_overbought = 70
+rsi_oversold = 30
+
+// Calculate RSI
+rsi = ta.rsi(close, rsi_length)
+
+// Define EMA settings
+ema_fast_length = 5
+ema_slow_length = 10
+
+// Calculate 5-EMA and 10-EMA
+ema_fast = ta.ema(close, ema_fast_length)
+ema_slow = ta.ema(close, ema_slow_length)
+
+// Define risk management settings
+stopLossPercent = input(1.5, title="Stop Loss %", type=input.float) / 100  // e.g., 1.5% stop loss
+takeProfitPercent = input(3.0, title="Take Profit %", type=input.float) / 100  // e.g., 3% take profit
+trailStopPercent = input(1.0, title="Trailing Stop %", type=input.float) / 100  // e.g., 1% trailing stop
+
+// Sell condition: RSI is near or above overbought level and 5-EMA crosses down 10-EMA
+sellCondition = (rsi >= rsi_overbought) and ta.crossover(ema_slow, ema_fast)
+
+// Buy condition: RSI is at or below oversold level and 5-EMA crosses up 10-EMA
+buyCondition = (rsi <= rsi_oversold) and ta.crossover(ema_fast, ema_slow)
+
+// Plot buy and sell signals on the chart
+plotshape(series=buyCondition, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="BUY")
+plotshape(series=sellCondition, title="Sell Signal", location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL")
+
+// --- Conditional Trading within Date Range ---
+inTradeWindow = (time >= startDate and time <= endDate)
+
+// Strategy execution with stop loss, take profit, and trailing stop
+if (inTradeWindow)
+    if (buyCondition)
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Take Profit/Stop Loss", "Long", 
+            stop = close * (1 - stopLossPercent), 
+            limit = close * (1 + takeProfitPercent), 
+            trail_points = close * trailStopPercent)
+
+    if (sellCondition)
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Take Profit/Stop Loss", "Short", 
+            stop = close * (1 + stopLossPercent), 
+            limit = close * (1 - takeProfitPercent), 
+            trail_points = close * trailStopPercent)
+
+// Plot EMAs for visual reference
+plot(ema_fast, color=color.blue, title="5-EMA")
+plot(ema_slow, color=color.red, title="10-EMA")

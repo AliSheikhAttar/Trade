@@ -1,0 +1,60 @@
+//@version=5
+strategy("ASA Strategy - HW1", overlay=true)
+
+
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2024-10-20 23:59"), title="End Date")
+
+// Define RSI settings
+rsi_length = 14
+rsi_overbought = 70
+rsi_oversold = 30
+
+// Calculate RSI
+rsi = ta.rsi(close, rsi_length)
+
+// Define MACD settings
+macd_fast = 12
+macd_slow = 26
+macd_signal = 9
+
+// Calculate MACD and MACD histogram
+[macdLine, signalLine, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
+
+// Define risk management inputs
+stopLossPercent = input.float(1.5, title="Stop Loss %") / 100  // e.g., 1.5% stop loss
+takeProfitPercent = input.float(3.0, title="Take Profit %") / 100  // e.g., 3% take profit
+trailStopPercent = input.float(1.0, title="Trailing Stop %") / 100  // e.g., 1% trailing stop
+
+// Conditions for a declining MACD histogram
+macd_declining = hist < hist[1]  // Current histogram value is less than the previous one
+
+// Short condition: RSI is overbought and MACD histogram is declining
+shortCondition = (rsi >= rsi_overbought) and macd_declining
+
+// Long condition: RSI is oversold and MACD histogram is declining
+longCondition = (rsi <= rsi_oversold) and macd_declining
+
+// Plot buy and sell signals on the chart
+plotshape(series=longCondition, title="Long Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="LONG")
+plotshape(series=shortCondition, title="Short Signal", location=location.abovebar, color=color.red, style=shape.labeldown, text="SHORT")
+
+// --- Conditional Trading within Date Range ---
+inTradeWindow = (time >= startDate and time <= endDate)
+
+// --- Strategy Entry and Exit Commands ---
+if (inTradeWindow)
+    if (longCondition)
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Take Profit/Stop Loss", "Long", stop = close * (1 - stopLossPercent), limit = close * (1 + takeProfitPercent), trail_points = close * trailStopPercent)
+
+    if (shortCondition)
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Take Profit/Stop Loss", "Short", stop = close * (1 + stopLossPercent), limit = close * (1 - takeProfitPercent), trail_points = close * trailStopPercent)
+
+// Optional: Plot MACD histogram and RSI for visual reference
+plot(hist, color=color.blue, title="MACD Histogram", style=plot.style_histogram)
+hline(0, "Zero Line", color=color.gray)
+plot(rsi, color=color.purple, title="RSI")
+hline(rsi_overbought, "Overbought Level", color=color.red)
+hline(rsi_oversold, "Oversold Level", color=color.green)

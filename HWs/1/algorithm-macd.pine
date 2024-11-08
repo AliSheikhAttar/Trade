@@ -1,0 +1,21 @@
+//@version=5
+strategy("ASA Strategy - HW1", overlay=true)
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2024-10-20 23:59"), title="End Date")
+fastLength = input(12)
+slowlength = input(26)
+MACDLength = input(9)
+MACD = ta.ema(close, fastLength) - ta.ema(close, slowlength)
+aMACD = ta.ema(MACD, MACDLength)
+delta = MACD - aMACD
+// --- Conditional Trading within Date Range ---
+inTradeWindow = (time >= startDate and time <= endDate)
+enter_long = ta.crossover(delta, 0)
+enter_short = ta.crossunder(delta, 0)
+// --- Strategy Entry and Exit Commands ---
+if (inTradeWindow)
+	if (enter_long)
+		strategy.entry("Long", strategy.long)
+	if (enter_short)
+		strategy.entry("Short", strategy.short)
+	//plot(strategy.equity, title="equity", color=color.red, linewidth=2, style=plot.style_areabr)

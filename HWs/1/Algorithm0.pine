@@ -1,0 +1,28 @@
+//@version=5
+strategy("Simple MA Crossover Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// --- Moving Average lengths ---
+shortLength = input.int(9, title="Short-term MA Length")
+longLength = input.int(21, title="Long-term MA Length")
+
+// --- Moving Average type ---
+useEMA = input.bool(true, title="Use EMA (false for SMA)")
+
+// --- Moving Averages ---
+shortMA = useEMA ? ta.ema(close, shortLength) : ta.sma(close, shortLength)
+longMA = useEMA ? ta.ema(close, longLength) : ta.sma(close, longLength)
+
+// --- Moving Average Crossover Conditions ---
+bullishCrossover = ta.crossover(shortMA, longMA)
+bearishCrossover = ta.crossunder(shortMA, longMA)
+
+// --- Strategy Entry and Exit ---
+if (bullishCrossover)
+    strategy.entry("Long", strategy.long, comment="Long Entry")
+
+if (bearishCrossover)
+    strategy.entry("Short", strategy.short, comment="Short Entry")
+
+// --- Plotting MAs for visualization ---
+plot(shortMA, title="Short-term MA", color=color.blue)
+plot(longMA, title="Long-term MA", color=color.red)

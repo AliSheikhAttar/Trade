@@ -1,0 +1,105 @@
+//@version=5
+strategy("ASA Strategy - HW1", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// --- User-defined Trading Date Range ---
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2024-10-20 23:59"), title="End Date")
+
+// --- Step 1: Define Parameters and Indicators ---
+
+// Moving Average Parameters
+shortLength = input.int(9, title="Short-term MA Length")
+longLength = input.int(21, title="Long-term MA Length")
+useEMA = input.bool(true, title="Use EMA (false for SMA)")
+
+// Moving Averages
+shortMA = useEMA ? ta.ema(close, shortLength) : ta.sma(close, shortLength)
+longMA = useEMA ? ta.ema(close, longLength) : ta.sma(close, longLength)
+
+// MACD and RSI settings
+macdFast = input.int(12, title="MACD Fast Length")
+macdSlow = input.int(26, title="MACD Slow Length")
+macdSignal = input.int(9, title="MACD Signal Length")
+rsiLength = input.int(14, title="RSI Length")
+macdHistThreshold = input.float(0.05, title="MACD Histogram Threshold")
+
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+rsi = ta.rsi(close, rsiLength)
+
+rsiEnterOB = input.int(70, title="RSI Overbought for Entry")
+rsiEnterOS = input.int(30, title="RSI Oversold for Entry")
+rsiExitOB = input.int(70, title="RSI Overbought for Exit")
+rsiExitOS = input.int(30, title="RSI Oversold for Exit")
+
+// Volume Analysis
+volumeThreshold = input.float(0.7, title="Volume Threshold Multiplier", minval=0.1)
+highVolume = volume > ta.sma(volume, 30) * volumeThreshold
+
+// ATR for Dynamic Stop-Loss/Take-Profit
+atrLength = input.int(14, title="ATR Length")
+atr = ta.atr(atrLength)
+stopLossMultiplier = input.float(1.5, title="ATR Stop-loss Multiplier")
+takeProfitMultiplier = input.float(2, title="ATR Take-profit Multiplier")
+
+// Calculate dynamic stop-loss and take-profit prices
+longStopPrice = close - (atr * stopLossMultiplier)
+longTakeProfitPrice = close + (atr * takeProfitMultiplier)
+shortStopPrice = close + (atr * stopLossMultiplier)
+shortTakeProfitPrice = close - (atr * takeProfitMultiplier)
+
+// --- Crossover and Angle Calculations ---
+angleThreshold = input.float(0.1, title="Crossover Angle Threshold")
+crossoverAngle = math.atan(shortMA - ta.valuewhen(shortMA != shortMA[1], shortMA[1], 0))
+bullishCrossover = ta.crossover(shortMA, longMA) and crossoverAngle > angleThreshold
+bearishCrossover = ta.crossunder(shortMA, longMA) and crossoverAngle < -angleThreshold
+
+// --- Step 2: Entry Conditions ---
+macdConfirmBullish = histLine > macdHistThreshold
+macdConfirmBearish = histLine < -macdHistThreshold
+rsiConfirmBullish = rsi < rsiEnterOB
+rsiConfirmBearish = rsi > rsiEnterOS
+
+enterLong = bullishCrossover and macdConfirmBullish and rsiConfirmBullish and highVolume
+enterShort = bearishCrossover and macdConfirmBearish and rsiConfirmBearish and highVolume
+
+// --- Step 3: Exit Conditions ---
+macdExitLong = ta.crossunder(macdLine, signalLine)
+macdExitShort = ta.crossover(macdLine, signalLine)
+
+exitOverbought = rsi > rsiExitOB
+exitOversold = rsi < rsiExitOS
+
+// Regular Divergence Detection
+divergenceLookback = input.int(5, title="Max Candle Distance for Divergence")
+bullishDivergence = ta.lowest(close, divergenceLookback) > ta.lowest(close, divergenceLookback * 2) and ta.lowest(macdLine, divergenceLookback) < ta.lowest(macdLine, divergenceLookback * 2)
+bearishDivergence = ta.highest(close, divergenceLookback) < ta.highest(close, divergenceLookback * 2) and ta.highest(macdLine, divergenceLookback) > ta.highest(macdLine, divergenceLookback * 2)
+
+exitLong = macdExitLong or exitOverbought or bearishDivergence
+exitShort = macdExitShort or exitOversold or bullishDivergence
+
+// --- Step 4: Risk Management ---
+// Trailing Stop Option
+trailStopLoss = input.float(0.015, title="Trailing Stop-loss %") * close
+
+// --- Conditional Trading within Date Range ---
+inTradeWindow = (time >= startDate and time <= endDate)
+
+// --- Strategy Entry and Exit Commands ---
+if (inTradeWindow)
+    if (enterLong)
+        strategy.entry("Long", strategy.long, comment="Long Entry")
+        strategy.exit("Take Profit/Stop Loss", "Long", stop=longStopPrice, limit=longTakeProfitPrice, trail_points=trailStopLoss)
+
+    if (enterShort)
+        strategy.entry("Short", strategy.short, comment="Short Entry")
+        strategy.exit("Take Profit/Stop Loss", "Short", stop=shortStopPrice, limit=shortTakeProfitPrice, trail_points=trailStopLoss)
+
+    if (exitLong)
+        strategy.close("Long", comment="Exit Long")
+
+    if (exitShort)
+        strategy.close("Short", comment="Exit Short")
+
+// --- Plotting MAs for Visualization ---
+plot(shortMA, title="Short-term MA", color=color.blue)
+plot(longMA, title="Long-term MA", color=color.red)

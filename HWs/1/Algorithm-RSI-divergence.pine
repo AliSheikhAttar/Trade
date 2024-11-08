@@ -1,0 +1,55 @@
+//@version=5
+strategy("ASA Strategy - HW1", overlay=true)
+
+// --- User-defined Trading Date Range ---
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2024-10-20 23:59"), title="End Date")
+
+// Define RSI settings
+rsi_length = 14
+rsi = ta.rsi(close, rsi_length)
+
+// Define risk management inputs
+stopLossPercent = input.float(1.5, title="Stop Loss %") / 100  // e.g., 1.5% stop loss
+takeProfitPercent = input.float(3.0, title="Take Profit %") / 100  // e.g., 3% take profit
+trailStopPercent = input.float(1.0, title="Trailing Stop %") / 100  // e.g., 1% trailing stop
+
+
+// Check if current time is within the trading period
+inTradingPeriod = (time >= startDate) and (time <= endDate)
+
+// Detect price lows and highs
+priceLow = ta.lowest(close, 5)
+priceHigh = ta.highest(close, 5)
+
+// Detect RSI lows and highs
+rsiLow = ta.lowest(rsi, 5)
+rsiHigh = ta.highest(rsi, 5)
+
+// Detect Bullish Divergence (Price lower low, RSI higher low)
+bullishDivergence = (close < priceLow[1]) and (rsi > rsiLow[1])
+
+// Detect Bearish Divergence (Price higher high, RSI lower high)
+bearishDivergence = (close > priceHigh[1]) and (rsi < rsiHigh[1])
+
+// Plot buy and sell signals on the chart
+plotshape(series=bullishDivergence and inTradingPeriod, title="Bullish Divergence (Long)", location=location.belowbar, color=color.green, style=shape.labelup, text="LONG")
+plotshape(series=bearishDivergence and inTradingPeriod, title="Bearish Divergence (Short)", location=location.abovebar, color=color.red, style=shape.labeldown, text="SHORT")
+// --- Conditional Trading within Date Range ---
+inTradeWindow = (time >= startDate and time <= endDate)
+
+// --- Strategy Entry and Exit Commands ---
+if (inTradeWindow)
+    // Strategy execution with stop loss, take profit, and trailing stop
+    if (bullishDivergence and inTradingPeriod)
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Take Profit/Stop Loss", "Long", stop = close * (1 - stopLossPercent), limit = close * (1 + takeProfitPercent), trail_points = close * trailStopPercent)
+
+    if (bearishDivergence and inTradingPeriod)
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Take Profit/Stop Loss", "Short", stop = close * (1 + stopLossPercent), limit = close * (1 - takeProfitPercent), trail_points = close * trailStopPercent)
+
+// Optional: Plot RSI for visual reference
+plot(rsi, color=color.purple, title="RSI")
+hline(70, "Overbought Level", color=color.red)
+hline(30, "Oversold Level", color=color.green)

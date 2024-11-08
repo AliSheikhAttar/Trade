@@ -1,0 +1,66 @@
+//@version=5
+strategy("RSI, EMA Crossover, and MACD Histogram Strategy with Risk Management", overlay=true)
+
+// --- User-defined Trading Date Range ---
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2024-10-20 23:59"), title="End Date")
+
+// Define RSI settings
+rsi_length = 14
+rsi_overbought = 70
+rsi_oversold = 30
+
+// Calculate RSI
+rsi = ta.rsi(close, rsi_length)
+
+// Define EMA settings
+ema_fast_length = 5
+ema_slow_length = 10
+
+// Calculate 5-EMA and 10-EMA
+ema_fast = ta.ema(close, ema_fast_length)
+ema_slow = ta.ema(close, ema_slow_length)
+
+// Define MACD settings
+macd_fast = 12
+macd_slow = 26
+macd_signal = 9
+
+// Calculate MACD and MACD histogram
+[macdLine, signalLine, hist] = ta.macd(close, macd_fast, macd_slow, macd_signal)
+
+// Define risk management inputs
+stopLossPercent = input.float(1.5, title="Stop Loss %") / 100  // e.g., 1.5% stop loss
+takeProfitPercent = input.float(3.0, title="Take Profit %") / 100  // e.g., 3% take profit
+trailStopPercent = input.float(1.0, title="Trailing Stop %") / 100  // e.g., 1% trailing stop
+
+// Condition for a declining MACD histogram
+macd_declining = hist < hist[1]  // MACD histogram is smaller than the previous value
+
+// Short Condition: RSI is near or above overbought, 5-EMA crosses down 10-EMA, and MACD histogram is declining
+shortCondition = (rsi >= rsi_overbought) and ta.crossover(ema_slow, ema_fast) and macd_declining
+
+// Long Condition: RSI is oversold, 5-EMA crosses up 10-EMA, and MACD histogram is declining
+longCondition = (rsi <= rsi_oversold) and ta.crossover(ema_fast, ema_slow) and macd_declining
+
+// Plot buy and sell signals on the chart
+plotshape(series=longCondition, title="Long Signal", location=location.belowbar, color=color.green, style=shape.labelup, text="LONG")
+plotshape(series=shortCondition, title="Short Signal", location=location.abovebar, color=color.red, style=shape.labeldown, text="SHORT")
+
+// Strategy execution with stop loss, take profit, and trailing stop
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Take Profit/Stop Loss", "Long", stop = close * (1 - stopLossPercent), limit = close * (1 + takeProfitPercent), trail_points = close * trailStopPercent)
+
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Take Profit/Stop Loss", "Short", stop = close * (1 + stopLossPercent), limit = close * (1 - takeProfitPercent), trail_points = close * trailStopPercent)
+
+// Plot EMAs, MACD histogram, and RSI for visual reference
+plot(ema_fast, color=color.blue, title="5-EMA")
+plot(ema_slow, color=color.red, title="10-EMA")
+plot(hist, color=color.blue, title="MACD Histogram", style=plot.style_histogram)
+hline(0, "Zero Line", color=color.gray)
+plot(rsi, color=color.purple, title="RSI")
+hline(rsi_overbought, "Overbought Level", color=color.red)
+hline(rsi_oversold, "Oversold Level", color=color.green)
